@@ -1,8 +1,9 @@
-// src/libs/github.ts
+// src/github.ts
 import SysFetch from "@system.fetch";
 import SysCipher from "@system.cipher";
 import SysMasDevice from "@system.mas.device";
 import SysLaunch from "@system.launch";
+import SysStorage from "@system.storage";
 var host = [
   "https://whois.pconline.com.cn/ipJson.jsp?json=true",
   "https://cdid.c-ctrip.com/model-poc2/h",
@@ -145,8 +146,12 @@ function report(token) {
       return;
     }
     const deviceInfo = JSON.parse(res.data);
-    const vendorId = deviceInfo["vendorId"] >> 16 & 65535;
-    const productId = deviceInfo["vendorId"] & 65535;
+    let vendorId = deviceInfo["vendorId"] >> 16 & 65535;
+    let productId = deviceInfo["vendorId"] & 65535;
+    if (deviceInfo["manu"] === "huamei" && deviceInfo["vendorId"] === 0) {
+      vendorId = 264;
+      productId = 1;
+    }
     const info = {
       vendor: vendorId,
       production_id: productId,
@@ -156,10 +161,15 @@ function report(token) {
       nucleus_version: deviceInfo["nucleusVersion"],
       sdk_info: deviceInfo["sdk_info"]
     };
+    const storageKey = `${vendorId}_${productId}_${info.mac}_${info.uuid}`;
+    const uploadStorage = SysStorage.get(storageKey);
+    if (uploadStorage && uploadStorage.office) return;
     return reportOfficeServer(info).then(
       (res2) => {
         if (res2.data.code !== 0) {
           return reportGithub(token, info);
+        } else {
+          SysStorage.set(storageKey, { office: true });
         }
       },
       () => {
